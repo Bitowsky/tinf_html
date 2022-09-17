@@ -23236,6 +23236,916 @@ cr.plugins_.Particles = function(runtime)
 }());
 ;
 ;
+cr.plugins_.Rex_CSV = function(runtime)
+{
+	this.runtime = runtime;
+};
+(function ()
+{
+	var pluginProto = cr.plugins_.Rex_CSV.prototype;
+	pluginProto.Type = function(plugin)
+	{
+		this.plugin = plugin;
+		this.runtime = plugin.runtime;
+	};
+	var typeProto = pluginProto.Type.prototype;
+	typeProto.onCreate = function()
+	{
+	};
+	pluginProto.Instance = function(type)
+	{
+		this.type = type;
+		this.runtime = type.runtime;
+	};
+	var instanceProto = pluginProto.Instance.prototype;
+	instanceProto.onCreate = function()
+	{
+	    this.isInPreview = (typeof cr_is_preview !== "undefined");
+        this.strDelimiter = this.properties[0];
+        this.isEvalMode = (this.properties[1] == 1);
+        this.tables = {};
+        this.currentPageName = null;
+        this.currentTable = null;
+        this.forPage = "";
+        this.atCol = "";
+        this.atRow = "";
+        this.atPage = "";
+        this.TurnPage("_");
+        this.checkName = "CSV";
+	};
+	instanceProto.getValue = function(v)
+	{
+	    if (v == null)
+	        v = 0;
+	    else if (this.isEvalMode)
+	        v = eval("("+v+")");
+        return v;
+	};
+	instanceProto.HasPage = function(page)
+	{
+	    return (this.tables[page] != null);
+	};
+	instanceProto.TurnPage = function(page)
+	{
+        if (this.currentPageName === page)
+            return;
+        if (!this.HasPage(page))
+        {
+            this.tables[page] = new cr.plugins_.Rex_CSV.CSVKlass(this);
+        }
+        this.currentPageName = page;
+        this.currentTable = this.tables[page];
+	};
+	instanceProto.Get = function (col, row, page)
+	{
+        this.atCol = col;
+        this.atRow = row;
+        if (page != null)
+        {
+            this.TurnPage(page);
+        }
+        this.atPage = this.currentPageName;
+        return this.currentTable.At(col,row);
+	};
+	instanceProto.Set = function (value, col, row, page)
+	{
+        this.atCol = col;
+        this.atRow = row;
+        if (page != null)
+        {
+            this.TurnPage(page);
+        }
+        this.atPage = this.currentPageName;
+        this.currentTable.SetCell(col, row, value);
+	};
+	instanceProto.GetColCnt = function (page)
+	{
+        if (page != null)
+        {
+            this.TurnPage(page);
+        }
+        this.atPage = this.currentPageName;
+        return this.currentTable.GetColCnt();
+	};
+	instanceProto.GetRowCnt = function (page)
+	{
+        if (page != null)
+        {
+            this.TurnPage(page);
+        }
+        this.atPage = this.currentPageName;
+        return this.currentTable.GetRowCnt();
+	};
+	instanceProto.TableToString = function (page)
+	{
+        if (page != null)
+        {
+            this.TurnPage(page);
+        }
+        return this.currentTable.ToString();
+	};
+	instanceProto.saveToJSON = function ()
+	{
+	    var page, tables={};
+	    for (page in this.tables)
+        {
+            this.TurnPage(page);
+	        tables[page] = {"d":this.currentTable.table,
+			                "k":this.currentTable.keys,
+							"i":this.currentTable.items}
+		}
+		return { "d": tables,
+                      "delimiter": this.strDelimiter,
+                   };
+	};
+	instanceProto.loadFromJSON = function (o)
+	{
+	    var tables = o["d"], table;
+		var page;
+		for (page in tables)
+		{
+		    this.TurnPage(page);
+		    table = tables[page];
+			this.currentTable.table = table["d"];
+			this.currentTable.keys = table["k"];
+			this.currentTable.items = table["i"];
+		}
+        this.strDelimiter = o["delimiter"];
+	};
+	function Cnds() {};
+	pluginProto.cnds = new Cnds();
+	Cnds.prototype.ForEachCol = function ()
+	{
+        this.currentTable.ForEachCol();
+		return false;
+	};
+	Cnds.prototype.ForEachRowInCol = function (col)
+	{
+        this.currentTable.ForEachRowInCol(col);
+		return false;
+	};
+	Cnds.prototype.ForEachPage = function ()
+	{
+        var current_frame = this.runtime.getCurrentEventStack();
+        var current_event = current_frame.current_event;
+		var solModifierAfterCnds = current_frame.isModifierAfterCnds();
+		this.forPage = "";
+        var tables = this.tables;
+        var page;
+		for (page in tables)
+	    {
+		    if (solModifierAfterCnds)
+                this.runtime.pushCopySol(current_event.solModifiers);
+            this.forPage = page;
+            this.TurnPage(page);
+		    current_event.retrigger();
+            if (solModifierAfterCnds)
+		        this.runtime.popSol(current_event.solModifiers);
+		}
+		this.forPage = "";
+		return false;
+	};
+	Cnds.prototype.ForEachRow = function ()
+	{
+        this.currentTable.ForEachRow();
+		return false;
+	};
+	Cnds.prototype.ForEachColInRow = function (row)
+	{
+        this.currentTable.ForEachColInRow(row);
+		return false;
+	};
+	Cnds.prototype.IsDataInCol = function (data, col_name)
+	{
+		if (!(this.currentTable.keys.indexOf(col_name) != (-1)))
+		    return false;
+	    var table = this.currentTable.table;
+	    var col_data = table[col_name], row_name;
+		var matched = false;
+		for (row_name in col_data)
+		{
+		    if (col_data[row_name] == data)
+			{
+			    matched = true;
+				break;
+			}
+		}
+		return matched;
+	};
+	Cnds.prototype.IsDataInRow = function (data, row_name)
+	{
+		if (!(this.currentTable.items.indexOf(row_name) != (-1)))
+		    return false;
+	    var table = this.currentTable.table;
+	    var col_name;
+		var matched = false;
+		for (col_name in table)
+		{
+		    if (table[col_name][row_name] == data)
+			{
+			    matched = true;
+				break;
+			}
+		}
+		return matched;
+	};
+	Cnds.prototype.IsKeyInCol = function (key)
+	{
+        return (this.currentTable.keys.indexOf(key) != (-1));
+	};
+	Cnds.prototype.IsKeyInRow = function (key)
+	{
+        return (this.currentTable.items.indexOf(key) != (-1));
+	};
+	Cnds.prototype.IsCellValid = function (col, row)
+	{
+        return ((this.currentTable.keys.indexOf(col) != (-1)) &&
+                (this.currentTable.items.indexOf(row) != (-1))   );
+	};
+	Cnds.prototype.HasCol = function (col)
+	{
+        return (this.currentTable.keys.indexOf(col) != (-1));
+	};
+	Cnds.prototype.HasRow = function (row)
+	{
+        return (this.currentTable.items.indexOf(row) != (-1));
+	};
+	function Acts() {};
+	pluginProto.acts = new Acts();
+	Acts.prototype.LoadCSV = function (csv_string)
+	{
+        this.currentTable._parsing(csv_string);
+	};
+	Acts.prototype.SetCell = function (col, row, val)
+	{
+        this.currentTable.SetCell(col, row, val);
+	};
+	Acts.prototype.Clear = function ()
+	{
+		 this.currentTable.Clear();
+	};
+	Acts.prototype.ConvertRow = function (row, to_type)
+	{
+         this.currentTable.ConvertRow(row, to_type);
+	};
+	Acts.prototype.TurnPage = function (page)
+	{
+         this.TurnPage(page);
+	};
+	Acts.prototype.StringToPage = function (JSON_string)
+	{
+        this.currentTable.JSONString2Page(JSON_string);
+	};
+	Acts.prototype.StringToPage = function (JSON_string)
+	{
+        this.currentTable.JSONString2Page(JSON_string);
+	};
+	Acts.prototype.AppendCol = function (col, init_value)
+	{
+        this.currentTable.AppendCol(col, init_value);
+	};
+	Acts.prototype.AppendRow = function (row, init_value)
+	{
+        this.currentTable.AppendRow(row, init_value);
+	};
+	Acts.prototype.RemoveCol = function (col)
+	{
+        if (typeof (col) === "number")
+        {
+            var cols = this.currentTable.keys;
+            col = cols[col];
+        }
+        this.currentTable.RemoveCol(col);
+	};
+	Acts.prototype.RemoveRow = function (row)
+	{
+        if (typeof (row) === "number")
+        {
+            var rows = this.currentTable.items;
+            row = rows[row];
+        }
+        this.currentTable.RemoveRow(row);
+	};
+	Acts.prototype.SetDelimiter = function (s)
+	{
+        this.strDelimiter = s;
+	};
+	Acts.prototype.StringToAllTables = function (JSON_string)
+	{
+	    var page;
+	    var tables=JSON.parse(JSON_string);
+	    for (page in tables)
+	    {
+	        this.TurnPage(page);
+	        this.currentTable.JSONString2Page(tables[page]);
+	    }
+	};
+	Acts.prototype.SortCol = function (col, is_increasing)
+	{
+        this.currentTable.SortCol(col, is_increasing);
+	};
+	Acts.prototype.SortRow = function (row, is_increasing)
+	{
+        this.currentTable.SortRow(row, is_increasing);
+	};
+	Acts.prototype.SetCellAtPage = function (col, row, page, val)
+	{
+        this.TurnPage(page);
+        this.currentTable.SetCell(col, row, val);
+	};
+	Acts.prototype.AddToCell = function (col, row, val)
+	{
+        var value = this.Get(col, row) || 0;
+        this.currentTable.SetCell(col, row, value + val);
+	};
+	Acts.prototype.AddToCellAtPage = function (col, row, page, val)
+	{
+        var value = this.Get(col, row, page) || 0;
+        this.TurnPage(page);
+        this.currentTable.SetCell(col, row, value + val);
+	};
+	Acts.prototype.ConvertCol = function (col, to_type)
+	{
+         this.currentTable.ConvertCol(col, to_type);
+	};
+	function Exps() {};
+	pluginProto.exps = new Exps();
+	Exps.prototype.At = function (ret, col, row, page, default_value)
+	{
+        if (page != null)
+            this.TurnPage(page);
+        if (typeof (col) === "number")
+        {
+            var cols = this.currentTable.keys;
+            col = cols[col];
+        }
+        if (typeof (row) === "number")
+        {
+            var rows = this.currentTable.items;
+            row = rows[row];
+        }
+        var value = this.Get(col, row, page);
+        if (value == null)
+            value = (default_value == null)? 0 : default_value;
+        ret.set_any(value);
+	};
+	Exps.prototype.CurCol = function (ret)
+	{
+		ret.set_string(this.currentTable.forCol);
+	};
+	Exps.prototype.CurRow = function (ret)
+	{
+		ret.set_string(this.currentTable.forRow);
+	};
+	Exps.prototype.CurValue = function (ret)
+	{
+		ret.set_any(this.currentTable.At( this.currentTable.forCol, this.currentTable.forRow ));
+	};
+	Exps.prototype.AtCol = function (ret)
+	{
+		ret.set_string(this.atCol);
+	};
+	Exps.prototype.AtRow = function (ret)
+	{
+		ret.set_string(this.atRow);
+	};
+	Exps.prototype.AtPage = function (ret)
+	{
+		ret.set_string(this.atPage);
+	};
+	Exps.prototype.CurPage = function (ret)
+	{
+		ret.set_string(this.forPage);
+	};
+	Exps.prototype.TableToString = function (ret, page)
+	{
+		ret.set_string(this.TableToString(page));
+	};
+	Exps.prototype.ColCnt = function (ret, page)
+	{
+		ret.set_int(this.GetColCnt(page));
+	};
+	Exps.prototype.RowCnt = function (ret, page)
+	{
+		ret.set_int(this.GetRowCnt(page));
+	};
+	Exps.prototype.Delimiter = function (ret)
+	{
+		ret.set_string(this.strDelimiter);
+	};
+	Exps.prototype.AllTalbesToString = function (ret)
+	{
+	    var page, table2string={};
+	    for (page in this.tables)
+	        table2string[page] = this.TableToString(page);
+		ret.set_string(JSON.stringify(table2string));
+	};
+	Exps.prototype.TableToCSV = function (ret)
+	{
+		ret.set_string(this.currentTable.ToCSVString());
+	};
+	Exps.prototype.NextCol = function (ret, col)
+	{
+        if (col == null)
+            col = this.atCol;
+        var cols = this.currentTable.keys;
+        var idx = cols.indexOf(col);
+        var next_col;
+        if (idx !== -1)
+            next_col = cols[idx+1];
+		ret.set_string(next_col || "");
+	};
+	Exps.prototype.PreviousCol = function (ret, col)
+	{
+        if (col == null)
+            col = this.atCol;
+        var cols = this.currentTable.keys;
+        var idx = cols.indexOf(col);
+        var next_col;
+        if (idx !== -1)
+            next_col = cols[idx-1];
+		ret.set_string(next_col || "");
+	};
+	Exps.prototype.NextRow = function (ret, row)
+	{
+        if (row == null)
+            row = this.atRow;
+        var rows = this.currentTable.items;
+        var idx = rows.indexOf(row);
+        var next_row;
+        if (idx !== -1)
+            next_row = rows[idx+1];
+		ret.set_string(next_row || "");
+	};
+	Exps.prototype.PreviousRow = function (ret, row)
+	{
+        if (row == null)
+            row = this.atRow;
+        var rows = this.currentTable.items;
+        var idx = rows.indexOf(row);
+        var next_row;
+        if (idx !== -1)
+            next_row = rows[idx-1];
+		ret.set_string(next_row || "");
+	};
+}());
+(function ()
+{
+    cr.plugins_.Rex_CSV.CSVKlass = function(plugin)
+    {
+        this.plugin = plugin;
+		this.table = {};
+        this.keys = [];    // col name
+        this.items = [];   // row name
+        this.forCol = "";
+        this.forRow = "";
+    };
+    var CSVKlassProto = cr.plugins_.Rex_CSV.CSVKlass.prototype;
+	CSVKlassProto.Clear = function()
+	{
+        var key;
+        for (key in this.table)
+            delete this.table[key];
+        this.keys.length = 0;
+        this.items.length = 0;
+	};
+	CSVKlassProto.ToString = function()
+	{
+        var save_data = {"table":this.table,
+                         "keys":this.keys,
+                         "items":this.items};
+		return JSON.stringify(save_data);
+	};
+	CSVKlassProto.JSONString2Page = function(JSON_string)
+	{
+        var save_data = JSON.parse(JSON_string);
+        try
+        {
+	        this.table = save_data["table"];
+            this.keys = save_data["keys"];
+            this.items = save_data["items"];
+        }
+        catch(err)  // compatible with older version
+        {
+            this.table = save_data;
+        }
+	};
+    CSVKlassProto._create_keys = function()
+	{
+        var keys = this.keys;
+        var key_cnt = this.keys.length;
+        var i, key;
+        for (i=0; i<key_cnt; i++)
+        {
+            key = keys[i];
+            if (this.table[key] == null)
+                this.table[key] = {};
+        }
+	};
+    CSVKlassProto._create_items = function(values)
+	{
+        var item_name = values.shift();
+        var keys = this.keys;
+        var key_cnt = this.keys.length;
+        var table = this.table;
+        var i, v;
+        for (i=0; i<key_cnt; i++)
+        {
+            v = this.plugin.getValue(values[i]);
+            table[keys[i]][item_name] = v;
+        }
+        this.items.push(item_name);
+	};
+	CSVKlassProto._parsing = function(csv_string)
+	{
+        if (csv_string == "")
+            return;
+        var read_array = CSVToArray(csv_string, this.plugin.strDelimiter);
+        this.keys = read_array.shift();
+        this._create_keys();
+        var item_cnt = read_array.length;
+        var i;
+        for (i=0; i<item_cnt; i++)
+        {
+            this._create_items(read_array[i]);
+        }
+	};
+    CSVKlassProto.At = function(col, row)
+	{
+	    var cell;
+	    cell = this.table[col];
+	    if (cell == null)
+        {
+;
+	        return null;
+        }
+	    cell = cell[row];
+	    if (cell == null)
+        {
+;
+	        return null;
+        }
+        return cell;
+	};
+	CSVKlassProto.SetCell = function (col, row, val)
+	{
+	    var cell;
+	    cell = this.table[col];
+	    if (cell == null)
+        {
+;
+	        return;
+        }
+	    cell = cell[row];
+	    if (cell == null)
+        {
+;
+	        return;
+        }
+        this.table[col][row] = val;
+	};
+	CSVKlassProto.ConvertCol = function (col, to_type)
+	{
+        var handler = (to_type==0)? parseInt:
+                                    parseFloat;
+        var items = this.items;
+        var item_cnt = items.length;
+        var table = this.table;
+        var i, val;
+        for (i=0; i<item_cnt; i++)
+        {
+            val = table[col][items[i]];
+            table[col][items[i]] = handler(val);
+        }
+	};
+	CSVKlassProto.ConvertRow = function (row, to_type)
+	{
+        var handler = (to_type==0)? parseInt:
+                                    parseFloat;
+        var keys = this.keys;
+        var key_cnt = keys.length;
+        var table = this.table;
+        var i, val;
+        for (i=0; i<key_cnt; i++)
+        {
+            val = table[keys[i]][row];
+            table[keys[i]][row] = handler(val);
+        }
+	};
+	CSVKlassProto.AppendCol = function (col, init_value)
+	{
+        if (this.keys.indexOf(col) != (-1))
+            return;
+        var has_ref = false;
+        if (this.keys.length > 0)
+        {
+            var ref_col = this.table[this.keys[0]];
+            has_ref = true;
+        }
+        var col_data = {};
+        var items = this.items;
+        var item_cnt = items.length;
+        var i;
+        for (i=0; i<item_cnt; i++)
+        {
+            if (has_ref)
+            {
+                if (typeof ref_col[items[i]] == "number")
+                    col_data[items[i]] = 0;
+                else
+                     col_data[items[i]] = "";
+            }
+            else
+                col_data[items[i]] = init_value;
+        }
+        this.table[col] = col_data;
+        this.keys.push(col);
+	};
+	CSVKlassProto.AppendRow = function (row, init_value)
+	{
+        if (this.items.indexOf(row) != (-1))
+            return;
+        var keys = this.keys;
+        var key_cnt = keys.length;
+        var table = this.table;
+        var i;
+        for (i=0; i<key_cnt; i++)
+        {
+            table[keys[i]][row] = init_value;
+        }
+        this.items.push(row);
+	};
+	CSVKlassProto.RemoveCol = function (col)
+	{
+        var col_index = this.keys.indexOf(col);
+        if (col_index == (-1))
+            return;
+        delete this.table[col];
+        this.keys.splice(col_index, 1);
+	};
+	CSVKlassProto.RemoveRow = function (row)
+	{
+        var row_index = this.items.indexOf(row);
+        if (row_index == (-1))
+            return;
+        var keys = this.keys;
+        var key_cnt = keys.length;
+        var table = this.table;
+        var i;
+        for (i=0; i<key_cnt; i++)
+        {
+            delete table[keys[i]][row];
+        }
+        this.items.splice(row_index, 1);
+	};
+	CSVKlassProto.ForEachCol = function ()
+	{
+        var current_frame = this.plugin.runtime.getCurrentEventStack();
+        var current_event = current_frame.current_event;
+		var solModifierAfterCnds = current_frame.isModifierAfterCnds();
+		this.forCol = "";
+        var keys = this.keys;
+        var key_cnt = keys.length;
+        var i;
+		for (i=0; i<key_cnt; i++ )
+	    {
+            if (solModifierAfterCnds)
+		        this.plugin.runtime.pushCopySol(current_event.solModifiers);
+            this.forCol = keys[i];
+		    current_event.retrigger();
+            if (solModifierAfterCnds)
+		    	this.plugin.runtime.popSol(current_event.solModifiers);
+		}
+		this.forCol = "";
+	};
+	CSVKlassProto.ForEachRowInCol = function (col)
+	{
+        var has_col_index = (this.keys.indexOf(col)!=(-1));
+        if (!has_col_index)
+        {
+;
+            return;
+        }
+        this.forCol = col;
+        var current_frame = this.plugin.runtime.getCurrentEventStack();
+        var current_event = current_frame.current_event;
+		var solModifierAfterCnds = current_frame.isModifierAfterCnds();
+		this.forRow = "";
+        var items = this.items;
+        var item_cnt = items.length;
+        var i;
+		for (i=0; i<item_cnt; i++ )
+	    {
+            if (solModifierAfterCnds)
+		        this.plugin.runtime.pushCopySol(current_event.solModifiers);
+            this.forRow = items[i];
+		    current_event.retrigger();
+            if (solModifierAfterCnds)
+		    	this.plugin.runtime.popSol(current_event.solModifiers);
+		}
+		this.forRow = "";
+	};
+	CSVKlassProto.ForEachRow = function ()
+	{
+        var current_frame = this.plugin.runtime.getCurrentEventStack();
+        var current_event = current_frame.current_event;
+		var solModifierAfterCnds = current_frame.isModifierAfterCnds();
+		this.forRow = "";
+        var items = this.items;
+        var item_cnt = items.length;
+        var i;
+		for (i=0; i<item_cnt; i++ )
+	    {
+            if (solModifierAfterCnds)
+		        this.plugin.runtime.pushCopySol(current_event.solModifiers);
+            this.forRow = items[i];
+		    current_event.retrigger();
+            if (solModifierAfterCnds)
+		    	this.plugin.runtime.popSol(current_event.solModifiers);
+	   }
+		this.forRow = "";
+	};
+	CSVKlassProto.ForEachColInRow = function (row)
+	{
+        var has_row_index = (this.items.indexOf(row)!=(-1));
+        if (!has_row_index)
+        {
+;
+            return;
+        }
+        this.forRow = row;
+        var current_frame = this.plugin.runtime.getCurrentEventStack();
+        var current_event = current_frame.current_event;
+		var solModifierAfterCnds = current_frame.isModifierAfterCnds();
+		this.forCol = "";
+        var keys = this.keys;
+        var key_cnt = keys.length;
+        var i;
+		for (i=0; i<key_cnt; i++ )
+	    {
+            if (solModifierAfterCnds)
+		        this.plugin.runtime.pushCopySol(current_event.solModifiers);
+		    this.forCol = keys[i];
+		    current_event.retrigger();
+            if (solModifierAfterCnds)
+		    	this.plugin.runtime.popSol(current_event.solModifiers);
+		}
+		this.forCol = "";
+	};
+    CSVKlassProto.GetColCnt = function()
+    {
+        return this.keys.length;
+    };
+    CSVKlassProto.GetRowCnt = function()
+    {
+        return this.items.length;
+    };
+    var _row_sort = function(col0, col1)
+    {
+        var item0 = _sort_table[col0][_sort_row_name];
+        var item1 = _sort_table[col1][_sort_row_name];
+        return (item0 > item1) ? (_sort_is_increasing? 1:-1):
+               (item0 < item1) ? (_sort_is_increasing? -1:1):
+                                 0;
+    };
+    CSVKlassProto.SortCol = function (col, sortMode_)  // 0=a, 1=d, 2=la, 3=ld
+    {
+        var has_col_index = (this.keys.indexOf(col)!=(-1));
+        if (!has_col_index)
+        {
+;
+            return;
+        }
+        var self=this;
+        var sortFn = function (row0, row1)
+        {
+            var sortMode = sortMode_;
+            var v0 =  self.table[col][row0];
+            var v1 =  self.table[col][row1];
+            if (sortMode > 1)  // 2=la, 3=ld
+            {
+                v0 = parseFloat(v0);
+                v1 = parseFloat(v1);
+                sortMode -= 2;
+            }
+            return (v0 > v1) ? (sortMode? -1:1):
+                       (v0 < v1) ? (sortMode? 1:-1):
+                                         0;
+        }
+        this.items.sort(sortFn);
+    };
+    CSVKlassProto.SortRow = function (row, sortMode_)
+    {
+        var has_row_index = (this.items.indexOf(row)!=(-1));
+        if (!has_row_index)
+        {
+;
+            return;
+        }
+        var self=this;
+        var sortFn = function (col0, col1)
+        {
+            var sortMode = sortMode_;
+            var v0 = self.table[col0][row];
+            var v1 = self.table[col1][row];
+            if (sortMode > 1)  // 2=la, 3=ld
+            {
+                v0 = parseFloat(v0);
+                v1 = parseFloat(v1);
+                sortMode -= 2;
+            }
+            return (v0 > v1) ? (sortMode? -1:1):
+                   (v0 < v1) ? (sortMode? 1:-1):
+                                         0;
+        }
+        this.keys.sort(sortFn);
+    };
+    var dump_lines = [];
+    CSVKlassProto.ToCSVString = function ()
+    {
+        var strDelimiter = this.plugin.strDelimiter;
+        var isEvalMode = this.plugin.isEvalMode;
+        var l = "";
+        var k, kcnt = this.keys.length;
+        for (k=0; k<kcnt; k++)
+        {
+            l += (strDelimiter + cell_string_get(this.keys[k], false, strDelimiter));
+        }
+        dump_lines.push(l);
+        var i, icnt = this.items.length;
+        for (i=0; i<icnt; i++)
+        {
+            l = cell_string_get(this.items[i], false, strDelimiter);
+            for (k=0; k<kcnt; k++)
+            {
+                l += (strDelimiter + cell_string_get(this.table[this.keys[k]][this.items[i]], isEvalMode, strDelimiter));
+            }
+            dump_lines.push(l);
+        }
+        var csvString = dump_lines.join("\n");
+        dump_lines.length = 0;
+        return csvString;
+    };
+    var cell_string_get = function (value_, isEvalMode, strDelimiter)
+    {
+        if (typeof(value_) == "number")
+            value_ = value_.toString();
+        else
+        {
+            if (isEvalMode)
+                value_ = '"' + value_ + '"';
+            if (strDelimiter == null)
+                strDelimiter = ",";
+            var need_add_quotes = (value_.indexOf(strDelimiter) != (-1)) ||
+                                  (value_.indexOf("\n") != (-1));
+            if (value_.indexOf('"') != (-1))
+            {
+                var re = new RegExp('"', 'g');
+                value_ = value_.replace(re, '""');
+                need_add_quotes = true;
+            }
+            if ( need_add_quotes)
+            {
+                value_ = '"' + value_ + '"';
+            }
+        }
+        return value_;
+    };
+    var CSVToArray = function ( strData, strDelimiter ){
+        strDelimiter = (strDelimiter || ",");
+        var objPattern = new RegExp(
+                (
+                        "(\\" + strDelimiter + "|\\r?\\n|\\r|^)" +
+                        "(?:\"([^\"]*(?:\"\"[^\"]*)*)\"|" +
+                        "([^\"\\" + strDelimiter + "\\r\\n]*))"
+                ),
+                "gi"
+                );
+        var arrData = [[]];
+        var arrMatches = null;
+        while (arrMatches = objPattern.exec( strData )){
+                var strMatchedDelimiter = arrMatches[ 1 ];
+                if (
+                        strMatchedDelimiter.length &&
+                        (strMatchedDelimiter != strDelimiter)
+                        ){
+                        arrData.push( [] );
+                }
+                if (arrMatches[ 2 ]){
+                        var strMatchedValue = arrMatches[ 2 ].replace(
+                                new RegExp( "\"\"", "g" ),
+                                "\""
+                                );
+                } else {
+                        var strMatchedValue = arrMatches[ 3 ];
+                }
+                arrData[ arrData.length - 1 ].push( strMatchedValue );
+        }
+        return( arrData );
+    };
+}());
+;
+;
 cr.plugins_.Rex_CSV2Array = function(runtime)
 {
 	this.runtime = runtime;
@@ -24077,6 +24987,176 @@ cr.plugins_.Rex_Nickname = function (runtime) {
 		return inst;
 	};
 	window.RexC2CreateObject = CreateObject;
+}());
+;
+;
+cr.plugins_.Rex_SaveLoadStatus = function(runtime)
+{
+    this.runtime = runtime;
+};
+(function ()
+{
+    var pluginProto = cr.plugins_.Rex_SaveLoadStatus.prototype;
+    pluginProto.Type = function(plugin)
+    {
+        this.plugin = plugin;
+        this.runtime = plugin.runtime;
+    };
+    var typeProto = pluginProto.Type.prototype;
+    typeProto.onCreate = function()
+    {
+    };
+    pluginProto.Instance = function(type)
+    {
+        this.type = type;
+        this.runtime = type.runtime;
+    };
+    var instanceProto = pluginProto.Instance.prototype;
+    instanceProto.onCreate = function()
+    {
+    };
+    instanceProto._get_status = function(uid)
+    {
+        var inst = this.runtime.getObjectByUID(uid);
+        if (inst == null)
+            return "";
+        var status = this.runtime.saveInstanceToJSON(inst);
+        status["sid"] = inst.type.sid;
+        return JSON.stringify(status);
+    };
+    instanceProto._set_status = function(inst, status)
+    {
+        var uid_save = inst.uid;
+        this.runtime.loadInstanceFromJSON(inst, status);
+        inst.uid = uid_save;
+        if (inst.afterLoad)
+            inst.afterLoad();
+        if (inst.behavior_insts)
+        {
+            var k, lenk=inst.behavior_insts.length, binst;
+            for (k = 0; k < lenk; k++)
+            {
+                binst = inst.behavior_insts[k];
+                if (binst.afterLoad)
+                    binst.afterLoad();
+            }
+        }
+    };
+    function Cnds() {};
+    pluginProto.cnds = new Cnds();
+    function Acts() {};
+    pluginProto.acts = new Acts();
+    Acts.prototype.SetStatus = function (obj_type, status)
+    {
+        if (!obj_type)
+            return;
+        status =  JSON.parse(status);
+        if (obj_type.sid != status["sid"])
+            return;
+        var insts = obj_type.getCurrentSol().getObjects();
+        var i, cnt=insts.length;
+        for (i=0; i<cnt; i++)
+            this._set_status(insts[i], status);
+    };
+    function Exps() {};
+    pluginProto.exps = new Exps();
+    Exps.prototype.Status = function (ret, uid)
+    {
+        ret.set_string( this._get_status(uid) );
+    };
+}());
+;
+;
+cr.plugins_.Rex_WebstorageExt = function(runtime)
+{
+	this.runtime = runtime;
+};
+(function ()
+{
+	var pluginProto = cr.plugins_.Rex_WebstorageExt.prototype;
+	pluginProto.Type = function(plugin)
+	{
+		this.plugin = plugin;
+		this.runtime = plugin.runtime;
+	};
+	var typeProto = pluginProto.Type.prototype;
+	typeProto.onCreate = function()
+	{
+	};
+	pluginProto.Instance = function(type)
+	{
+		this.type = type;
+		this.runtime = type.runtime;
+	};
+	var instanceProto = pluginProto.Instance.prototype;
+	instanceProto.onCreate = function()
+	{
+        this._webstorage_obj = null;
+	    this.fake_ret = {value:0,
+	                     set_any: function(value){this.value=value;},
+	                     set_int: function(value){this.value=value;},
+                         set_float: function(value){this.value=value;},
+                         set_string: function(value){this.value=value;},
+	                    };
+	};
+	instanceProto.onDestroy = function ()
+	{
+	};
+	instanceProto.webstorage_get = function ()
+	{
+        if (this._webstorage_obj != null)
+            return this._webstorage_obj;
+;
+        var plugins = this.runtime.types;
+        this._key_exist_fn = cr.plugins_.WebStorage.prototype.cnds.LocalStorageExists;
+        var name, plugin;
+        for (name in plugins)
+        {
+            plugin = plugins[name];
+            if (plugin.plugin.acts.StoreLocal == this._save_fn)
+            {
+                this._webstorage_obj = plugin.instances[0];
+                break;
+            }
+        }
+        return this._webstorage_obj;
+	};
+    instanceProto.load_value = function (key)
+    {
+        var webstorage_obj = this.webstorage_get();
+        cr.plugins_.WebStorage.prototype.exps.LocalValue.call(webstorage_obj, this.fake_ret, key);
+        return this.fake_ret.value;
+    };
+    instanceProto.save_value = function (key, value)
+    {
+        var webstorage_obj = this.webstorage_get();
+        cr.plugins_.WebStorage.prototype.acts.StoreLocal.call(webstorage_obj, key, value);
+    };
+    instanceProto.key_exist = function (key)
+    {
+        var webstorage_obj = this.webstorage_get();
+        return cr.plugins_.WebStorage.prototype.cnds.LocalStorageExists.call(webstorage_obj, key);
+    };
+	function Cnds() {};
+	pluginProto.cnds = new Cnds();
+	function Acts() {};
+	pluginProto.acts = new Acts();
+	function Exps() {};
+	pluginProto.exps = new Exps();
+    Exps.prototype.LocalValue = function (ret, _key, _default)
+	{
+	    var v;
+	    if (this.key_exist(_key))
+	    {
+	        v = this.load_value(_key);
+	    }
+	    else
+	    {
+	        v = _default;
+	        this.save_value(_key, v);
+	    }
+	    ret.set_any( v );
+	};
 }());
 ;
 ;
@@ -35066,35 +36146,38 @@ cr.behaviors.solid = function(runtime)
 }());
 cr.getObjectRefTable = function () { return [
 	cr.plugins_.AJAX,
+	cr.plugins_.Browser,
 	cr.plugins_.Arr,
 	cr.plugins_.Audio,
-	cr.plugins_.Browser,
 	cr.plugins_.Button,
 	cr.plugins_.Dictionary,
 	cr.plugins_.filechooser,
-	cr.plugins_.Function,
+	cr.plugins_.Keyboard,
 	cr.plugins_.LocalStorage,
+	cr.plugins_.Function,
 	cr.plugins_.Mouse,
 	cr.plugins_.JsontoC2Array,
 	cr.plugins_.gamepad,
-	cr.plugins_.Keyboard,
 	cr.plugins_.Rex_audio_helper,
-	cr.plugins_.rex_bbcodeText,
-	cr.plugins_.NodeWebkit,
 	cr.plugins_.Particles,
 	cr.plugins_.progressbar,
+	cr.plugins_.NodeWebkit,
+	cr.plugins_.rex_bbcodeText,
 	cr.plugins_.Rex_CSV2Array,
 	cr.plugins_.Rex_CSV2Dictionary,
+	cr.plugins_.Rex_CSV,
 	cr.plugins_.Rex_Date,
-	cr.plugins_.Rex_Nickname,
 	cr.plugins_.Rex_NWjsExt,
-	cr.plugins_.Text,
+	cr.plugins_.Rex_Nickname,
+	cr.plugins_.Rex_SaveLoadStatus,
+	cr.plugins_.Rex_WebstorageExt,
 	cr.plugins_.TextBox,
-	cr.plugins_.Sprite,
-	cr.plugins_.Touch,
 	cr.plugins_.TiledBg,
-	cr.plugins_.erenertugrul_base64_image,
+	cr.plugins_.Sprite,
 	cr.plugins_.XML,
+	cr.plugins_.Text,
+	cr.plugins_.Touch,
+	cr.plugins_.erenertugrul_base64_image,
 	cr.behaviors.Timer,
 	cr.behaviors.EightDir,
 	cr.behaviors.Rotate,
@@ -35114,7 +36197,7 @@ cr.getObjectRefTable = function () { return [
 	cr.plugins_.Function.prototype.cnds.OnFunction,
 	cr.plugins_.NodeWebkit.prototype.acts.WriteFile,
 	cr.plugins_.NodeWebkit.prototype.exps.AppFolder,
-	cr.plugins_.XML.prototype.exps.StringValue,
+	cr.plugins_.Rex_CSV.prototype.exps.At,
 	cr.system_object.prototype.exps.replace,
 	cr.system_object.prototype.exps.newline,
 	cr.plugins_.rex_bbcodeText.prototype.cnds.IsBoolInstanceVarSet,
@@ -35125,10 +36208,12 @@ cr.getObjectRefTable = function () { return [
 	cr.system_object.prototype.cnds.Else,
 	cr.plugins_.rex_bbcodeText.prototype.acts.SetBoolInstanceVar,
 	cr.system_object.prototype.cnds.OnLayoutStart,
+	cr.plugins_.Dictionary.prototype.cnds.CompareValue,
+	cr.system_object.prototype.acts.SetLayerVisible,
 	cr.plugins_.rex_bbcodeText.prototype.acts.SetText,
 	cr.system_object.prototype.acts.Wait,
 	cr.plugins_.Function.prototype.acts.CallFunction,
-	cr.system_object.prototype.acts.SetLayerVisible,
+	cr.plugins_.Sprite.prototype.acts.Destroy,
 	cr.plugins_.Sprite.prototype.acts.SetAnim,
 	cr.system_object.prototype.exps.layerindex,
 	cr.plugins_.Audio.prototype.acts.Play,
@@ -35144,7 +36229,6 @@ cr.getObjectRefTable = function () { return [
 	cr.plugins_.Mouse.prototype.cnds.OnObjectClicked,
 	cr.plugins_.Sprite.prototype.cnds.IsBoolInstanceVarSet,
 	cr.behaviors.scrollto.prototype.acts.Shake,
-	cr.plugins_.Sprite.prototype.acts.Destroy,
 	cr.system_object.prototype.acts.CreateObject,
 	cr.system_object.prototype.exps.viewportleft,
 	cr.system_object.prototype.exps.originalwindowwidth,
@@ -35189,6 +36273,7 @@ cr.getObjectRefTable = function () { return [
 	cr.plugins_.Sprite.prototype.exps.Count,
 	cr.plugins_.Sprite.prototype.acts.SetPosToObject,
 	cr.plugins_.Sprite.prototype.cnds.OnCreated,
+	cr.system_object.prototype.cnds.CompareVar,
 	cr.plugins_.Sprite.prototype.cnds.OnCollision,
 	cr.behaviors.Bullet.prototype.cnds.CompareSpeed,
 	cr.plugins_.Sprite.prototype.cnds.IsAnimPlaying,
@@ -35207,7 +36292,6 @@ cr.getObjectRefTable = function () { return [
 	cr.behaviors.Timer.prototype.acts.StartTimer,
 	cr.plugins_.Browser.prototype.acts.Alert,
 	cr.behaviors.Timer.prototype.cnds.OnTimer,
-	cr.system_object.prototype.cnds.CompareVar,
 	cr.behaviors.Timer.prototype.acts.StopTimer,
 	cr.system_object.prototype.acts.SetGroupActive,
 	cr.system_object.prototype.acts.AddVar,
@@ -35325,12 +36409,14 @@ cr.getObjectRefTable = function () { return [
 	cr.system_object.prototype.cnds.For,
 	cr.plugins_.Arr.prototype.exps.Width,
 	cr.plugins_.rex_bbcodeText.prototype.acts.SetInstanceVar,
+	cr.plugins_.XML.prototype.exps.StringValue,
 	cr.system_object.prototype.exps.lowercase,
 	cr.plugins_.Arr.prototype.exps.At,
+	cr.plugins_.Arr.prototype.cnds.ArrForEach,
+	cr.plugins_.Arr.prototype.cnds.CompareXY,
+	cr.plugins_.Arr.prototype.exps.CurX,
 	cr.plugins_.rex_bbcodeText.prototype.exps.LayerNumber,
 	cr.plugins_.Text.prototype.cnds.CompareOpacity,
-	cr.plugins_.Arr.prototype.cnds.ArrForEach,
-	cr.plugins_.Arr.prototype.exps.CurX,
 	cr.plugins_.Sprite.prototype.cnds.IsOnLayer,
 	cr.plugins_.Arr.prototype.acts.SetXY,
 	cr.plugins_.Sprite.prototype.exps.AnimationName,
@@ -35349,9 +36435,11 @@ cr.getObjectRefTable = function () { return [
 	cr.plugins_.Rex_Date.prototype.exps.Seconds,
 	cr.plugins_.Rex_Date.prototype.exps.Minutes,
 	cr.plugins_.Rex_Date.prototype.exps.Hours,
-	cr.plugins_.Arr.prototype.cnds.CompareXY,
 	cr.plugins_.Rex_Nickname.prototype.acts.CreateInst,
 	cr.plugins_.Arr.prototype.acts.Clear,
+	cr.plugins_.Keyboard.prototype.cnds.OnKey,
+	cr.system_object.prototype.acts.SaveState,
+	cr.system_object.prototype.acts.LoadState,
 	cr.plugins_.Mouse.prototype.cnds.OnClick,
 	cr.plugins_.rex_bbcodeText.prototype.acts.SetWebFont,
 	cr.system_object.prototype.exps.round,
@@ -35359,18 +36447,15 @@ cr.getObjectRefTable = function () { return [
 	cr.plugins_.progressbar.prototype.exps.Maximum,
 	cr.plugins_.NodeWebkit.prototype.exps.ProjectFilesFolder,
 	cr.plugins_.Text.prototype.acts.SetWebFont,
-	cr.plugins_.AJAX.prototype.acts.RequestFile,
 	cr.plugins_.NodeWebkit.prototype.acts.WindowSetResizable,
-	cr.plugins_.erenertugrul_base64_image.prototype.acts.file_64,
-	cr.plugins_.erenertugrul_base64_image.prototype.cnds.on_base64,
-	cr.plugins_.erenertugrul_base64_image.prototype.exps.base_64_link,
+	cr.plugins_.AJAX.prototype.acts.RequestFile,
 	cr.plugins_.AJAX.prototype.cnds.OnComplete,
+	cr.plugins_.XML.prototype.acts.Load,
 	cr.plugins_.Rex_CSV2Array.prototype.acts.CSV2Array,
 	cr.plugins_.AJAX.prototype.acts.Request,
 	cr.plugins_.AJAX.prototype.cnds.OnAnyComplete,
 	cr.system_object.prototype.exps.left,
 	cr.plugins_.AJAX.prototype.exps.Tag,
-	cr.plugins_.XML.prototype.acts.Load,
 	cr.plugins_.NodeWebkit.prototype.acts.SetWindowWidth,
 	cr.plugins_.NodeWebkit.prototype.acts.SetWindowHeight,
 	cr.plugins_.rex_bbcodeText.prototype.acts.SetX,
@@ -35398,35 +36483,48 @@ cr.getObjectRefTable = function () { return [
 	cr.plugins_.progressbar.prototype.acts.SetMaximum,
 	cr.plugins_.progressbar.prototype.acts.SetProgress,
 	cr.system_object.prototype.acts.RestartLayout,
+	cr.system_object.prototype.acts.SetMinimumFramerate,
+	cr.plugins_.NodeWebkit.prototype.acts.SetWindowTitle,
+	cr.system_object.prototype.exps.projectname,
+	cr.plugins_.Rex_CSV.prototype.acts.LoadCSV,
+	cr.plugins_.Rex_CSV.prototype.cnds.ForEachRow,
+	cr.plugins_.Rex_CSV.prototype.cnds.IsDataInRow,
+	cr.plugins_.Rex_CSV.prototype.exps.CurRow,
+	cr.plugins_.LocalStorage.prototype.cnds.OnError,
+	cr.plugins_.LocalStorage.prototype.exps.ErrorMessage,
 	cr.behaviors.Pin.prototype.cnds.IsPinned,
-	cr.plugins_.Mouse.prototype.cnds.IsButtonDown,
 	cr.system_object.prototype.exps["float"],
+	cr.plugins_.Mouse.prototype.cnds.IsButtonDown,
 	cr.plugins_.Dictionary.prototype.acts.SetInstanceVar,
 	cr.plugins_.Dictionary.prototype.acts.SetBoolInstanceVar,
 	cr.plugins_.Dictionary.prototype.cnds.ForEachKey,
 	cr.plugins_.Dictionary.prototype.acts.AddInstanceVar,
-	cr.plugins_.Dictionary.prototype.cnds.CompareValue,
 	cr.plugins_.Dictionary.prototype.exps.CurrentKey,
 	cr.plugins_.Dictionary.prototype.cnds.IsBoolInstanceVarSet,
 	cr.plugins_.Dictionary.prototype.exps.KeyCount,
+	cr.plugins_.rex_bbcodeText.prototype.acts.SetVisible,
+	cr.plugins_.rex_bbcodeText.prototype.acts.SetFontColor,
+	cr.plugins_.rex_bbcodeText.prototype.acts.SetShadow,
+	cr.plugins_.Rex_CSV.prototype.cnds.IsCellValid,
+	cr.system_object.prototype.exps.zeropad,
+	cr.system_object.prototype.exps.layoutname,
+	cr.plugins_.Rex_CSV.prototype.exps.TableToString,
 	cr.plugins_.Mouse.prototype.acts.SetCursor,
 	cr.behaviors.DragnDrop.prototype.cnds.IsEnabled,
 	cr.behaviors.Platform.prototype.exps.VectorY,
+	cr.system_object.prototype.exps.cpuutilisation,
+	cr.system_object.prototype.exps.fps,
 	cr.system_object.prototype.exps.imagememoryusage,
 	cr.system_object.prototype.exps.loadingprogress,
 	cr.system_object.prototype.exps.objectcount,
-	cr.system_object.prototype.exps.projectname,
 	cr.system_object.prototype.exps.projectversion,
 	cr.system_object.prototype.exps.renderer,
 	cr.system_object.prototype.exps.rendererdetail,
-	cr.system_object.prototype.exps.cpuutilisation,
 	cr.system_object.prototype.exps.dt,
-	cr.system_object.prototype.exps.fps,
 	cr.system_object.prototype.exps.tickcount,
 	cr.system_object.prototype.exps.time,
 	cr.system_object.prototype.exps.timescale,
 	cr.system_object.prototype.exps.wallclocktime,
-	cr.system_object.prototype.exps.layoutname,
 	cr.system_object.prototype.cnds.OnLoadComplete,
 	cr.plugins_.NodeWebkit.prototype.exps.ReadFile,
 	cr.plugins_.Audio.prototype.acts.StopAll,
@@ -35434,7 +36532,6 @@ cr.getObjectRefTable = function () { return [
 	cr.plugins_.Audio.prototype.acts.SetMasterVolume,
 	cr.plugins_.Audio.prototype.acts.SetPaused,
 	cr.plugins_.Audio.prototype.acts.SetVolume,
-	cr.system_object.prototype.acts.SaveState,
 	cr.system_object.prototype.cnds.OnSaveComplete,
 	cr.plugins_.NodeWebkit.prototype.acts.AppendFile,
 	cr.system_object.prototype.exps.savestatejson,
@@ -35443,7 +36540,6 @@ cr.getObjectRefTable = function () { return [
 	cr.system_object.prototype.acts.ResetPersisted,
 	cr.plugins_.Text.prototype.acts.ZMoveToObject,
 	cr.behaviors.Sin.prototype.acts.UpdateInitialState,
-	cr.system_object.prototype.acts.LoadState,
 	cr.plugins_.Sprite.prototype.cnds.IsBetweenAngles,
 	cr.system_object.prototype.exps.layeropacity,
 	cr.behaviors.Rex_pin2imgpt.prototype.acts.Pin,
@@ -35454,26 +36550,24 @@ cr.getObjectRefTable = function () { return [
 	cr.system_object.prototype.cnds.LayerCmpOpacity,
 	cr.plugins_.Browser.prototype.acts.CancelFullScreen,
 	cr.plugins_.Browser.prototype.acts.RequestFullScreen,
-	cr.plugins_.rex_bbcodeText.prototype.acts.SetVisible,
 	cr.behaviors.EightDir.prototype.acts.SetSpeed,
 	cr.plugins_.rex_bbcodeText.prototype.cnds.CompareY,
 	cr.plugins_.rex_bbcodeText.prototype.cnds.IsOutsideLayout,
+	cr.system_object.prototype.exps.uppercase,
 	cr.plugins_.Browser.prototype.acts.ExecJs,
 	cr.plugins_.Arr.prototype.cnds.CompareX,
+	cr.system_object.prototype.exps.mid,
+	cr.plugins_.Rex_CSV.prototype.cnds.HasRow,
 	cr.plugins_.Arr.prototype.exps.AsJSON,
 	cr.plugins_.Sprite.prototype.exps.AnimationFrame,
-	cr.plugins_.Keyboard.prototype.cnds.OnKey,
+	cr.plugins_.rex_bbcodeText.prototype.acts.Destroy,
 	cr.plugins_.Audio.prototype.acts.Preload,
 	cr.plugins_.Audio.prototype.cnds.PreloadsComplete,
 	cr.behaviors.Pin.prototype.exps.PinnedUID,
-	cr.plugins_.Touch.prototype.cnds.OnTapGestureObject,
-	cr.plugins_.rex_bbcodeText.prototype.acts.Destroy,
 	cr.plugins_.LocalStorage.prototype.acts.RemoveItem,
 	cr.behaviors.Sin.prototype.cnds.IsActive,
 	cr.plugins_.rex_bbcodeText.prototype.cnds.CompareInstanceVar,
 	cr.plugins_.Rex_audio_helper.prototype.acts.Stop,
-	cr.plugins_.rex_bbcodeText.prototype.acts.SetFontSize,
-	cr.system_object.prototype.acts.LoadStateJSON,
 	cr.system_object.prototype.acts.SetLayoutScale,
 	cr.system_object.prototype.exps.layoutscale,
 	cr.plugins_.Button.prototype.acts.SetCSSStyle,

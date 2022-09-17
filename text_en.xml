@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <text>
 
-	<languagename>English</languagename> <!-- TYPE HERE YOUR LANGUAGE NAME IN YOUR LANGUAGE -->
+	<languagename dont_delete_this_var="true">English</languagename> <!-- TYPE HERE YOUR LANGUAGE NAME IN YOUR LANGUAGE -->
 	
 	<loading>LOADING - PLEASE WAIT</loading>
 	
@@ -353,7 +353,7 @@
 		<voice id="1" name="buttonintro2" sound="buttonintro201" char="fangame" wait="0.2">Ladies and gentelmens!</voice>
 		<voice id="2" name="buttonintro2" sound="buttonintro202" char="fangame" wait="0.3">I'm happy to announce...</voice>
 		<voice id="3" name="buttonintro2" sound="buttonintro203" char="fangame" wait="0">...a button!</voice>
-		<voice id="4" name="buttonintro2" func="btn_show">...a button!</voice>
+		<voice id="4" name="buttonintro2" func="btn_show"></voice>
 		
 		<voice id="1" name="buttonintro3" sound="buttonintro301" char="fangame" wait="0.2">Yes, this is the button.</voice>
 		<voice id="2" name="buttonintro3" sound="buttonintro302" char="fangame" wait="0.3">It's pretty red and round and</voice>
@@ -705,18 +705,18 @@
 		<voice id="4" name="endscene_talk3" func="end_ad_next"></voice>
 		
 		<voice id="1" name="endscene_talk4" sound="endscene_talk401" char="glitch" em="Pissed" wait="0.3">Well, actually the last thing that i wanted to do is completing my evil plan!</voice>
-		<voice id="2" name="endscene_talk4" sound="endscene_talk402" char="glitch" em="Angry" wait="0.1">You know what plan...</voice>
-		<voice id="3" name="endscene_talk4" sound="endscene_talk403" char="glitch" em="Angry" wait="0">That one that will let me...</voice>
+		<voice id="2" name="endscene_talk4" sound="endscene_talk402" char="glitch" em="Normal" wait="0.1">You know what plan...</voice>
+		<voice id="3" name="endscene_talk4" sound="endscene_talk403" char="glitch" em="Normal" wait="0">That one that will let me...</voice>
 		<voice id="4" name="endscene_talk4" func="end_ad_next"></voice>
 		
 		<voice id="1" name="endscene_talk5" sound="endscene_talk501" char="glitch" em="Happy" wait="0.5">...the whole world!</voice>
 		<voice id="2" name="endscene_talk5" sound="endscene_talk502" char="glitch" em="Pissed" wait="0">But that plan would be easier to do, if i wasn't trapped here!</voice>
-		<voice id="3" name="endscene_talk5" sound="endscene_talk503" char="glitch" em="Angry" wait="0">I need to find a way out!</voice>
+		<voice id="3" name="endscene_talk5" sound="endscene_talk503" char="glitch" em="Normal" wait="0">I need to find a way out!</voice>
 		<voice id="4" name="endscene_talk5" func="end_ad_next"></voice>
 		
-		<voice id="1" name="endscene_talk6" sound="endscene_talk601" char="glitch" em="Angry" wait="0">Whaaaaaaaa!</voice>
+		<voice id="1" name="endscene_talk6" sound="endscene_talk601" char="glitch" em="Normal" wait="0">Whaaaaaaaa!</voice>
 		
-		<voice id="1" name="endscene_lastwords" sound="endscene_lastwords01" char="glitch" em="Angry" wait="0">I'll be back soon!</voice>
+		<voice id="1" name="endscene_lastwords" sound="endscene_lastwords01" char="glitch" em="Normal" wait="0">I'll be back soon!</voice>
 		<voice id="2" name="endscene_lastwords" sound="endscene_lastwords02" char="glitch" em="Happy" wait="0">Hahahahahaha!</voice>
 		
 		<voice id="1" name="endscene_lastwords2" sound="endscene_lastwords201" char="glitch" em="Suprised" wait="0">OW!</voice>
@@ -803,6 +803,9 @@
 			
 			<theend>THE END</theend>
 			<theend2>THE END?</theend2>
+			
+			<tran_of>OFFICIAL TRANSLATIONS</tran_of>
+			<tran_fan>FANMADE TRANSLATIONS</tran_fan>
 			
 			<tran>
 				<en>ENGLISH</en>
